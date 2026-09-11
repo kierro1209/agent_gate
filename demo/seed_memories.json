@@ -1,0 +1,5 @@
+[
+  {"text": "For distributed systems interviews, always start from CAP theorem tradeoffs and mention idempotent consumers with Kafka.", "metadata": {"kind": "sticky"}},
+  {"text": "Tomorrow afternoon, the user has a dentist appointment at 2:30 PM.", "metadata": {"kind": "calendar"}},
+  {"text": "The user prefers calendar summaries grouped into morning, afternoon, and evening.", "metadata": {"kind": "preference"}}
+]

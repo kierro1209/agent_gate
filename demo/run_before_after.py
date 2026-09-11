@@ -1,0 +1,86 @@
+import os
+import sys
+from collections.abc import Callable
+
+from dotenv import load_dotenv
+
+from adapters.fixture import FixtureAdapter
+from adapters.mem0_adapter import Mem0Adapter, MemoryStore
+from gate.criteria import Criteria, load_criteria
+from gate.gate import gate_memories
+from gate.judge import FunctionJudge, GeminiJudge, Judge
+from gate.models import TurnContext
+from loop.agent import build_prompt
+
+STICKY_MARKER = "CAP theorem"
+
+
+def fixture_score(turn: TurnContext, memory: str) -> float:
+    query, text = turn.user_message.lower(), memory.lower()
+    if not memory:
+        return 0.4
+    systems = any(word in query for word in ("cap", "kafka", "distributed"))
+    calendar = any(word in query for word in ("calendar", "schedule", "tomorrow"))
+    relevant = (systems and any(x in text for x in ("cap", "kafka"))) or (
+        calendar and any(x in text for x in ("appointment", "calendar"))
+    )
+    if relevant:
+        return 0.8 if "unverified context" in text else 0.9
+    return 0.35 if "unverified context" in text else 0.3
+
+
+def live_complete(key: str, model: str) -> Callable[[str], str]:
+    from google import genai
+
+    client = genai.Client(api_key=key)
+
+    def complete(prompt: str) -> str:
+        return client.models.generate_content(model=model, contents=prompt).text or ""
+
+    return complete
+
+
+def runtime(criteria: Criteria) -> tuple[MemoryStore, Judge, Callable[[str], str], str]:
+    load_dotenv()
+    mem0_key, gemini_key = os.getenv("MEM0_API_KEY"), os.getenv("GEMINI_API_KEY")
+    if bool(mem0_key) != bool(gemini_key):
+        raise RuntimeError("set both MEM0_API_KEY and GEMINI_API_KEY, or neither")
+    if mem0_key and gemini_key:
+        return (
+            Mem0Adapter(mem0_key),
+            GeminiJudge(gemini_key, criteria.judge_model, criteria.judge_prompt),
+            live_complete(gemini_key, criteria.judge_model),
+            "live",
+        )
+    return FixtureAdapter(), FunctionJudge(fixture_score), lambda prompt: prompt, "fixture"
+
+
+def main() -> int:
+    criteria = load_criteria()
+    store, judge, complete, mode = runtime(criteria)
+    store.seed_memories()
+    turn = TurnContext(
+        "calendar-demo", criteria.agent_id, "What's on my calendar tomorrow afternoon?"
+    )
+    candidates = store.search_candidates(turn, criteria.top_k)
+    before = build_prompt(turn.user_message, candidates)
+    result = gate_memories(turn, candidates, judge, criteria=criteria, cache={})
+    after = build_prompt(turn.user_message, result.accepted)
+    print(f"mode={mode}")
+    print("seeded ids:", ", ".join(str(item.get("id", "")) for item in store.inspect()))
+    print("search hits:", ", ".join(item.id for item in candidates))
+    print(f"gate off sticky leak={'YES' if STICKY_MARKER in before else 'NO'}")
+    print(f"gate on sticky leak={'YES' if STICKY_MARKER in after else 'NO'}")
+    print("candidate | s_no | s_with | s_pert | utility | stability | accepted")
+    for d in result.decisions:
+        print(
+            f"{d.candidate_id} | {d.s_no:.2f} | {d.s_with:.2f} | {d.s_pert:.2f} | "
+            f"{d.utility:.2f} | {d.stability:.2f} | {d.accepted}"
+        )
+    print("\nBEFORE ANSWER\n", complete(before))
+    print("\nAFTER ANSWER\n", complete(after))
+    return int(STICKY_MARKER in after)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

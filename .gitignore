@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.*_cache/
+.venv/
+.env
+.env.*
+!.env.example
+*.egg-info/
+logs/*.jsonl
+benchmarks/results/
