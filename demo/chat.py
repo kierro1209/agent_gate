@@ -2,6 +2,7 @@ import sys
 from collections.abc import Callable
 
 from adapters.mem0_adapter import MemoryStore
+from connectors.google_workspace import GoogleWorkspace, SourceRecord, route_sources
 from demo.run_before_after import runtime
 from gate.criteria import Criteria, load_criteria
 from gate.gate import ScoreCache, gate_memories
@@ -42,6 +43,7 @@ def answer_turn(
     complete: Callable[[str], str],
     criteria: Criteria,
     cache: ScoreCache,
+    workspace: GoogleWorkspace | None = None,
 ) -> str:
     candidates = store.search_candidates(turn, criteria.top_k)
     print_retrieved(candidates)
@@ -59,7 +61,24 @@ def answer_turn(
         print("  (none)")
     for candidate in selected:
         print(f"  [{candidate.id}] {candidate.text}")
-    return complete(build_prompt(turn.user_message, selected))
+    try:
+        sources = route_sources(workspace, turn.user_message) if workspace else []
+    except Exception as exc:
+        print(f"\nGoogle source error: {exc}", file=sys.stderr)
+        sources = []
+    print("\nLive Google sources:")
+    if not sources:
+        print("  (none)")
+    for source in sources:
+        print(f"  [{source.source}:{source.id}] {source.text}")
+    return complete(build_prompt(turn.user_message, selected, format_sources(sources)))
+
+
+def format_sources(sources: list[SourceRecord]) -> str:
+    return "\n".join(
+        f"- source={item.source} id={item.id} observed_at={item.observed_at}: {item.text}"
+        for item in sources
+    )
 
 
 def main() -> int:
@@ -68,6 +87,7 @@ def main() -> int:
     store.seed_memories()
     gate_enabled = True
     cache: dict[tuple[str, str], tuple[float, float, float]] = {}
+    workspace = GoogleWorkspace()
     turn_number = 0
     print(f"Memory Gate chat ({mode}); gate=ON")
     print("Commands: /gate on, /gate off, /quit")
@@ -93,7 +113,9 @@ def main() -> int:
         turn_number += 1
         turn = TurnContext(f"chat-{turn_number}", criteria.agent_id, message)
         try:
-            answer = answer_turn(turn, gate_enabled, store, judge, complete, criteria, cache)
+            answer = answer_turn(
+                turn, gate_enabled, store, judge, complete, criteria, cache, workspace
+            )
         except Exception as exc:
             print(f"\nError: {exc}", file=sys.stderr)
             continue

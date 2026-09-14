@@ -5,6 +5,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
+credentials.json
+token.json
+google_credentials.json
+google_token.json
 *.egg-info/
 logs/*.jsonl
 benchmarks/results/

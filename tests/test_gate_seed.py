@@ -97,7 +97,7 @@ def test_mem0_scope_calls(tmp_path: Path) -> None:
     add_call = next(call for call in calls if call[0] == "add")
     assert add_call[1]["infer"] is False
     assert add_call[1]["user_id"] == SCOPE["user_id"]
-    assert add_call[1]["agent_id"] == SCOPE["agent_id"]
+    assert "agent_id" not in add_call[1]
     read_calls = [call for call in calls if call[0] in {"search", "get_all"}]
     assert all(call[1]["filters"] == SCOPE for call in read_calls)
 

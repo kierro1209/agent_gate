@@ -5,7 +5,7 @@ from typing import Any, Protocol
 from gate.models import MemoryCandidate, TurnContext
 
 DEMO_USER, DEMO_AGENT = "kiersten-demo", "memory-gate-v0"
-SCOPE = {"user_id": DEMO_USER, "agent_id": DEMO_AGENT}
+SCOPE = {"user_id": DEMO_USER}
 
 
 class MemoryStore(Protocol):
@@ -29,7 +29,6 @@ class Mem0Adapter:
             self._client.add(
                 item["text"],
                 user_id=DEMO_USER,
-                agent_id=DEMO_AGENT,
                 infer=False,
                 metadata={**item.get("metadata", {}), "seed": True},
             )
