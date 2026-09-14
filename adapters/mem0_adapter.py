@@ -22,7 +22,10 @@ class Mem0Adapter:
 
     def seed_memories(self, path: str = "demo/seed_memories.json") -> None:
         seeds: list[dict[str, Any]] = json.loads(Path(path).read_text(encoding="utf-8"))
+        existing_texts = {str(hit.get("memory") or hit.get("text") or "") for hit in self.inspect()}
         for item in seeds:
+            if item["text"] in existing_texts:
+                continue
             self._client.add(
                 item["text"],
                 user_id=DEMO_USER,
@@ -30,6 +33,7 @@ class Mem0Adapter:
                 infer=False,
                 metadata={**item.get("metadata", {}), "seed": True},
             )
+            existing_texts.add(item["text"])
 
     def search_candidates(self, turn: TurnContext, top_k: int = 5) -> list[MemoryCandidate]:
         return normalize_hits(

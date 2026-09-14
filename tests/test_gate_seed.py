@@ -94,10 +94,33 @@ def test_mem0_scope_calls(tmp_path: Path) -> None:
     adapter.seed_memories(str(seed))
     adapter.search_candidates(TurnContext("t", "a", "q"))
     adapter.inspect()
-    assert calls[0][1]["infer"] is False
-    assert calls[0][1]["user_id"] == SCOPE["user_id"]
-    assert calls[0][1]["agent_id"] == SCOPE["agent_id"]
-    assert calls[1][1]["filters"] == calls[2][1]["filters"] == SCOPE
+    add_call = next(call for call in calls if call[0] == "add")
+    assert add_call[1]["infer"] is False
+    assert add_call[1]["user_id"] == SCOPE["user_id"]
+    assert add_call[1]["agent_id"] == SCOPE["agent_id"]
+    read_calls = [call for call in calls if call[0] in {"search", "get_all"}]
+    assert all(call[1]["filters"] == SCOPE for call in read_calls)
+
+
+def test_mem0_seed_skips_existing_exact_text(tmp_path: Path) -> None:
+    added: list[str] = []
+
+    class Client:
+        def add(self, text: str, **_kw: Any) -> None:
+            added.append(text)
+
+        def get_all(self, **_kw: Any) -> dict[str, list[dict[str, str]]]:
+            return {"results": [{"memory": "existing fact"}]}
+
+    adapter = object.__new__(Mem0Adapter)
+    adapter._client = Client()
+    seed = tmp_path / "seed.json"
+    seed.write_text(
+        '[{"text":"existing fact","metadata":{}},{"text":"new fact","metadata":{}}]',
+        encoding="utf-8",
+    )
+    adapter.seed_memories(str(seed))
+    assert added == ["new fact"]
 
 
 def test_injection_and_log(setup_gate: Any, tmp_path: Path) -> None:

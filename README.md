@@ -36,8 +36,9 @@ python -m demo.run_before_after
 ```
 
 The live path uses Mem0 `MemoryClient`, exact `infer=False` seeds, and matching
-`user_id` plus `agent_id` v3 filters. Adds can be asynchronous; if the initial search
-misses a seed, wait briefly and rerun. Repeated live runs add duplicate demo seeds.
+`user_id` plus `agent_id` v3 filters. Before seeding, it lists that scope and skips
+exact seed texts that already exist. Adds can be asynchronous; if the initial search
+misses a newly added seed, wait briefly and rerun.
 
 Output includes retrieved IDs, leak status, and CMI scores. Agent-loop decisions append
 to `logs/decisions.jsonl`. Criteria, judge prompt, model, perturbation, scope, and top-k
