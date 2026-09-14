@@ -20,24 +20,32 @@ class FunctionJudge:
         return value
 
 
-class GeminiJudge:
+class OpenAIJudge:
     def __init__(self, api_key: str, model: str, prompt: str) -> None:
-        from google import genai
+        from openai import OpenAI
 
-        self._client = genai.Client(api_key=api_key)
+        self._client = OpenAI(api_key=api_key)
         self._model, self._prompt = model, prompt
 
     def score(self, turn: TurnContext, memory_block: str) -> float:
-        response = self._client.models.generate_content(
+        response = self._client.chat.completions.create(
             model=self._model,
-            contents=self._prompt.format(
-                user_message=turn.user_message, memory_block=memory_block or "(none)"
-            ),
-            config={"response_mime_type": "application/json"},
+            messages=[
+                {
+                    "role": "user",
+                    "content": self._prompt.format(
+                        user_message=turn.user_message,
+                        memory_block=memory_block or "(none)",
+                    ),
+                }
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
         )
-        if not response.text:
+        content = response.choices[0].message.content
+        if not content:
             raise ValueError("judge returned no text")
-        value = float(json.loads(response.text)["score"])
+        value = float(json.loads(content)["score"])
         if not 0 <= value <= 1:
             raise ValueError("judge score must be between 0 and 1")
         return value

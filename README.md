@@ -27,11 +27,11 @@ Stability, the exact injected memories, and the answer. Use `/gate off` to compa
 retrieval injection, `/gate on` to restore CMI, and `/quit` to exit. Enabled-gate
 decisions are also appended to `logs/decisions.jsonl`.
 
-With neither API key set, the demo is deterministic and offline. For live Mem0 and Gemini:
+With neither API key set, the demo is deterministic and offline. For live Mem0 and OpenAI:
 
 ```powershell
 $env:MEM0_API_KEY = "<Mem0 Platform key>"
-$env:GEMINI_API_KEY = "<Gemini API key>"
+$env:OPENAI_API_KEY = "<OpenAI API key>"
 python -m demo.run_before_after
 ```
 

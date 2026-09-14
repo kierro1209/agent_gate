@@ -8,7 +8,7 @@ from adapters.fixture import FixtureAdapter
 from adapters.mem0_adapter import Mem0Adapter, MemoryStore
 from gate.criteria import Criteria, load_criteria
 from gate.gate import gate_memories
-from gate.judge import FunctionJudge, GeminiJudge, Judge
+from gate.judge import FunctionJudge, Judge, OpenAIJudge
 from gate.models import TurnContext
 from loop.agent import build_prompt
 
@@ -30,26 +30,31 @@ def fixture_score(turn: TurnContext, memory: str) -> float:
 
 
 def live_complete(key: str, model: str) -> Callable[[str], str]:
-    from google import genai
+    from openai import OpenAI
 
-    client = genai.Client(api_key=key)
+    client = OpenAI(api_key=key)
 
     def complete(prompt: str) -> str:
-        return client.models.generate_content(model=model, contents=prompt).text or ""
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        return response.choices[0].message.content or ""
 
     return complete
 
 
 def runtime(criteria: Criteria) -> tuple[MemoryStore, Judge, Callable[[str], str], str]:
     load_dotenv()
-    mem0_key, gemini_key = os.getenv("MEM0_API_KEY"), os.getenv("GEMINI_API_KEY")
-    if bool(mem0_key) != bool(gemini_key):
-        raise RuntimeError("set both MEM0_API_KEY and GEMINI_API_KEY, or neither")
-    if mem0_key and gemini_key:
+    mem0_key, openai_key = os.getenv("MEM0_API_KEY"), os.getenv("OPENAI_API_KEY")
+    if bool(mem0_key) != bool(openai_key):
+        raise RuntimeError("set both MEM0_API_KEY and OPENAI_API_KEY, or neither")
+    if mem0_key and openai_key:
         return (
             Mem0Adapter(mem0_key),
-            GeminiJudge(gemini_key, criteria.judge_model, criteria.judge_prompt),
-            live_complete(gemini_key, criteria.judge_model),
+            OpenAIJudge(openai_key, criteria.judge_model, criteria.judge_prompt),
+            live_complete(openai_key, criteria.judge_model),
             "live",
         )
     return FixtureAdapter(), FunctionJudge(fixture_score), lambda prompt: prompt, "fixture"
