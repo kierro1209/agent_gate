@@ -27,6 +27,12 @@ Stability, the exact injected memories, and the answer. Use `/gate off` to compa
 retrieval injection, `/gate on` to restore CMI, and `/quit` to exit. Enabled-gate
 decisions are also appended to `logs/decisions.jsonl`.
 
+After each answer, the chat also extracts candidate long-lived memories from the turn,
+applies the same CMI utility/stability test before persistence, then reconciles them
+against existing stored memories. Duplicate candidates are skipped, conflicting facts can
+update an existing memory, and extra stale duplicates can be deleted. Formation events are
+appended to `logs/formations.jsonl`.
+
 ### Google Calendar and Gmail
 
 The chat optionally reads Google Calendar and Gmail as live sources. It does not save
@@ -56,8 +62,9 @@ The live path uses Mem0 `MemoryClient`, exact `infer=False` seeds, and a matchin
 `user_id=kiersten-demo` filter. Raw `infer=False` writes in the current Platform client
 are user-scoped; `memory-gate-v0` remains the local agent and decision-log identity.
 Before seeding, the adapter lists the user scope and skips exact seed texts that already
-exist. Adds can be asynchronous; if a search misses a newly added seed, wait briefly
-and rerun.
+exist. Post-turn learning also uses Mem0 `add`, `update`, and `delete` APIs with exact
+stored text after the project’s own extraction and gating step. Adds can be asynchronous;
+if a search misses a newly added or updated memory, wait briefly and rerun.
 
 Output includes retrieved IDs, leak status, and CMI scores. Agent-loop decisions append
 to `logs/decisions.jsonl`. Criteria, judge prompt, model, perturbation, scope, and top-k

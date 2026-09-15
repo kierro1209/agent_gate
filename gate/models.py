@@ -41,3 +41,39 @@ class GateResult:
     accepted: list[MemoryCandidate]
     rejected: list[MemoryCandidate]
     decisions: list[GateDecision]
+
+
+@dataclass(frozen=True)
+class MemoryDraft:
+    text: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class FormationDecision:
+    candidate_text: str
+    s_no: float
+    s_with: float
+    s_pert: float
+    utility: float
+    stability: float
+    accepted: bool
+    action: str
+    reason: str
+    target_memory_id: str = ""
+    deleted_memory_ids: list[str] = field(default_factory=list)
+    criteria_version: str = "cmi-v0"
+
+    def to_dict(self) -> dict[str, object]:
+        data = asdict(self)
+        data["candidateText"] = data.pop("candidate_text")
+        data["targetMemoryId"] = data.pop("target_memory_id")
+        data["deletedMemoryIds"] = data.pop("deleted_memory_ids")
+        data["criteriaVersion"] = data.pop("criteria_version")
+        return data
+
+
+@dataclass(frozen=True)
+class FormationResult:
+    drafts: list[MemoryDraft]
+    decisions: list[FormationDecision]
