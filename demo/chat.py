@@ -5,7 +5,7 @@ from adapters.mem0_adapter import MemoryStore
 from connectors.google_workspace import GoogleWorkspace, SourceRecord, route_sources
 from demo.run_before_after import runtime
 from gate.criteria import Criteria, load_criteria
-from gate.formation import MemoryExtractor, MemoryReconciler, form_memories
+from gate.formation import FormationError, MemoryExtractor, MemoryReconciler, form_memories
 from gate.gate import ScoreCache, gate_memories
 from gate.judge import Judge
 from gate.models import FormationResult, GateResult, MemoryCandidate, TurnContext
@@ -48,11 +48,6 @@ def print_formation(result: FormationResult) -> None:
         print("  (none)")
     for decision in result.decisions:
         print(f"  [{decision.action.upper()}] {decision.candidate_text}")
-        print(
-            f"    s_no={decision.s_no:.3f}  s_with={decision.s_with:.3f}  "
-            f"s_pert={decision.s_pert:.3f}"
-        )
-        print(f"    utility={decision.utility:.3f}  stability={decision.stability:.3f}")
         if decision.target_memory_id:
             print(f"    target={decision.target_memory_id}")
         if decision.deleted_memory_ids:
@@ -60,7 +55,7 @@ def print_formation(result: FormationResult) -> None:
         print(f"    {decision.reason}")
 
 
-def answer_turn(
+def generate_answer(
     turn: TurnContext,
     gate_enabled: bool,
     store: MemoryStore,
@@ -68,9 +63,6 @@ def answer_turn(
     complete: Callable[[str], str],
     criteria: Criteria,
     cache: ScoreCache,
-    memory_extractor: MemoryExtractor,
-    formation_judge: Judge,
-    formation_reconciler: MemoryReconciler,
     workspace: GoogleWorkspace | None = None,
 ) -> str:
     candidates = store.search_candidates(turn, criteria.top_k)
@@ -99,20 +91,99 @@ def answer_turn(
         print("  (none)")
     for source in sources:
         print(f"  [{source.source}:{source.id}] {source.text}")
-    answer = complete(build_prompt(turn.user_message, selected, format_sources(sources)))
+    return complete(build_prompt(turn.user_message, selected, format_sources(sources)))
+
+
+def run_formation(
+    turn: TurnContext,
+    answer: str,
+    store: MemoryStore,
+    memory_extractor: MemoryExtractor,
+    formation_reconciler: MemoryReconciler,
+) -> FormationResult:
     formation = form_memories(
         turn,
         answer,
         store,
         memory_extractor,
-        formation_judge,
         formation_reconciler,
-        criteria,
-        cache=cache,
     )
     print_formation(formation)
     append_formation_decisions("logs/formations.jsonl", turn, formation.decisions)
+    return formation
+
+
+def answer_turn(
+    turn: TurnContext,
+    gate_enabled: bool,
+    store: MemoryStore,
+    judge: Judge,
+    complete: Callable[[str], str],
+    criteria: Criteria,
+    cache: ScoreCache,
+    memory_extractor: MemoryExtractor,
+    formation_reconciler: MemoryReconciler,
+    workspace: GoogleWorkspace | None = None,
+) -> str:
+    answer = generate_answer(
+        turn,
+        gate_enabled,
+        store,
+        judge,
+        complete,
+        criteria,
+        cache,
+        workspace,
+    )
+    run_formation(
+        turn,
+        answer,
+        store,
+        memory_extractor,
+        formation_reconciler,
+    )
     return answer
+
+
+def process_turn(
+    turn: TurnContext,
+    gate_enabled: bool,
+    store: MemoryStore,
+    judge: Judge,
+    complete: Callable[[str], str],
+    criteria: Criteria,
+    cache: ScoreCache,
+    memory_extractor: MemoryExtractor,
+    formation_reconciler: MemoryReconciler,
+    workspace: GoogleWorkspace | None = None,
+) -> None:
+    try:
+        answer = generate_answer(
+            turn,
+            gate_enabled,
+            store,
+            judge,
+            complete,
+            criteria,
+            cache,
+            workspace,
+        )
+    except Exception as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
+        return
+    print(f"\nAgent: {answer}")
+    try:
+        run_formation(
+            turn,
+            answer,
+            store,
+            memory_extractor,
+            formation_reconciler,
+        )
+    except FormationError as exc:
+        print(f"\nMemory formation error: {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"\nMemory formation error: unexpected failure: {exc}", file=sys.stderr)
 
 
 def format_sources(sources: list[SourceRecord]) -> str:
@@ -130,7 +201,6 @@ def main() -> int:
         complete,
         mode,
         memory_extractor,
-        formation_judge,
         formation_reconciler,
     ) = runtime(criteria)
     store.seed_memories()
@@ -161,24 +231,18 @@ def main() -> int:
 
         turn_number += 1
         turn = TurnContext(f"chat-{turn_number}", criteria.agent_id, message)
-        try:
-            answer = answer_turn(
-                turn,
-                gate_enabled,
-                store,
-                judge,
-                complete,
-                criteria,
-                cache,
-                memory_extractor,
-                formation_judge,
-                formation_reconciler,
-                workspace,
-            )
-        except Exception as exc:
-            print(f"\nError: {exc}", file=sys.stderr)
-            continue
-        print(f"\nAgent: {answer}")
+        process_turn(
+            turn,
+            gate_enabled,
+            store,
+            judge,
+            complete,
+            criteria,
+            cache,
+            memory_extractor,
+            formation_reconciler,
+            workspace,
+        )
 
 
 if __name__ == "__main__":

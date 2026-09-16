@@ -3,7 +3,7 @@ from collections.abc import MutableMapping
 from gate.criteria import Criteria, load_criteria
 from gate.judge import Judge
 from gate.models import GateDecision, GateResult, MemoryCandidate, TurnContext
-from gate.perturb import perturb
+from gate.perturb import perturb_variants
 
 ScoreCache = MutableMapping[tuple[str, str], tuple[float, float, float]]
 
@@ -29,10 +29,14 @@ def gate_memories(
         key = (turn.turn_id, candidate.id)
         scores = cache.get(key) if cache is not None else None
         if scores is None:
+            perturbed_scores = [
+                judge.score(turn, block)
+                for block in perturb_variants(candidate.text, config.distractor)
+            ]
             scores = (
                 judge.score(turn, ""),
                 judge.score(turn, candidate.text),
-                judge.score(turn, perturb(candidate.text, config.distractor)),
+                max(perturbed_scores, default=0.0),
             )
             if cache is not None:
                 cache[key] = scores

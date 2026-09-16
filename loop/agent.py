@@ -40,7 +40,6 @@ def handle_turn(
     formation_log_path: str | Path = "logs/formations.jsonl",
     cache: ScoreCache | None = None,
     memory_extractor: MemoryExtractor | None = None,
-    formation_judge: Judge | None = None,
     formation_reconciler: MemoryReconciler | None = None,
 ) -> str:
     candidates = store.search_candidates(turn, criteria.top_k)
@@ -49,16 +48,13 @@ def handle_turn(
         append_decisions(log_path, turn, result.decisions)
         candidates = result.accepted
     answer = complete(build_prompt(turn.user_message, candidates))
-    if memory_extractor and formation_judge and formation_reconciler:
+    if memory_extractor and formation_reconciler:
         formation = form_memories(
             turn,
             answer,
             store,
             memory_extractor,
-            formation_judge,
             formation_reconciler,
-            criteria,
-            cache=cache,
         )
         append_formation_decisions(formation_log_path, turn, formation.decisions)
     return answer

@@ -8,7 +8,6 @@ from adapters.fixture import FixtureAdapter
 from adapters.mem0_adapter import Mem0Adapter, MemoryStore
 from gate.criteria import Criteria, load_criteria
 from gate.formation import (
-    FORMATION_JUDGE_PROMPT,
     FunctionMemoryExtractor,
     FunctionMemoryReconciler,
     MemoryExtractor,
@@ -33,25 +32,23 @@ def fixture_score(turn: TurnContext, memory: str) -> float:
     relevant = (systems and any(x in text for x in ("cap", "kafka"))) or (
         calendar and any(x in text for x in ("appointment", "calendar"))
     )
-    if relevant:
-        return 0.8 if "unverified context" in text else 0.9
-    return 0.35 if "unverified context" in text else 0.3
-
-
-def fixture_formation_score(turn: TurnContext, memory: str) -> float:
-    context = turn.user_message.lower()
-    text = memory.lower()
-    if not memory:
-        return 0.3
+    score = 0.9 if relevant else 0.3
     if "unverified context" in text:
-        if any(word in context for word in ("prefer", "every", "project", "want")):
-            return 0.55
-        return 0.2
-    if any(word in text for word in ("prefers", "every", "recurring", "project", "wants to")):
-        return 0.9
-    if any(word in text for word in ("tomorrow", "today")):
-        return 0.2
-    return 0.35
+        score -= 0.15
+    if any(
+        phrase in text
+        for phrase in (
+            "possibly unrelated",
+            "mixed into this memory block",
+            "mixed in",
+            "incomplete",
+            "speculative",
+            "outdated",
+            "conflict",
+        )
+    ):
+        score -= 0.2
+    return max(0.0, min(1.0, score))
 
 
 def live_complete(key: str, model: str) -> Callable[[str], str]:
@@ -78,7 +75,6 @@ def runtime(
     Callable[[str], str],
     str,
     MemoryExtractor,
-    Judge,
     MemoryReconciler,
 ]:
     load_dotenv()
@@ -92,7 +88,6 @@ def runtime(
             live_complete(openai_key, criteria.judge_model),
             "live",
             OpenAIMemoryExtractor(openai_key, criteria.judge_model),
-            OpenAIJudge(openai_key, criteria.judge_model, FORMATION_JUDGE_PROMPT),
             OpenAIMemoryReconciler(openai_key, criteria.judge_model),
         )
     return (
@@ -101,14 +96,13 @@ def runtime(
         lambda prompt: prompt,
         "fixture",
         FunctionMemoryExtractor(),
-        FunctionJudge(fixture_formation_score),
         FunctionMemoryReconciler(),
     )
 
 
 def main() -> int:
     criteria = load_criteria()
-    store, judge, complete, mode, _extractor, _formation_judge, _reconciler = runtime(criteria)
+    store, judge, complete, mode, _extractor, _reconciler = runtime(criteria)
     store.seed_memories()
     turn = TurnContext(
         "calendar-demo", criteria.agent_id, "What's on my calendar tomorrow afternoon?"

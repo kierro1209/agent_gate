@@ -1,7 +1,7 @@
 # Memory Gate
 
 A thin CMI §3.4 gate for Mem0 Platform retrieval. Each hit is judged with no memory,
-the original memory, and a perturbed memory. It is injected only when
+the original memory, and several perturbed variants. It is injected only when
 `s_with - s_no > 0` and `s_with - s_pert >= 0`.
 
 ## Setup and demo
@@ -26,12 +26,28 @@ The chat prints retrieved memories, retrieval scores, every CMI decision, Utilit
 Stability, the exact injected memories, and the answer. Use `/gate off` to compare raw
 retrieval injection, `/gate on` to restore CMI, and `/quit` to exit. Enabled-gate
 decisions are also appended to `logs/decisions.jsonl`.
+After each answer, the chat also extracts candidate long-lived memories from the turn and
+reconciles them against existing stored memories without a formation-time gate. Duplicate
+candidates are skipped, conflicting facts can update an existing memory, and extra stale
+duplicates can be deleted. Formation events are appended to `logs/formations.jsonl`.
 
-After each answer, the chat also extracts candidate long-lived memories from the turn,
-applies the same CMI utility/stability test before persistence, then reconciles them
-against existing stored memories. Duplicate candidates are skipped, conflicting facts can
-update an existing memory, and extra stale duplicates can be deleted. Formation events are
-appended to `logs/formations.jsonl`.
+## Multi-agent chat
+
+```powershell
+python -m demo.multi_chat
+```
+
+The multi-agent chat now simulates two clearer specialists: a health coach and a
+scheduling agent. Health-oriented requests lead with the health coach and consult the
+scheduling agent for calendar support; calendar-heavy requests lead with the scheduling
+agent and consult the health coach for fitness, recovery, and nutrition constraints.
+Retrieved memories can still be gated for the lead agent's final answer, and the same CMI
+gate is used to decide whether a memory should be shared with the consulting specialist at
+all. Use `/share off` to bypass cross-agent memory gating, `/share on` to restore it, and
+inspect `logs/share_decisions.jsonl` for allow/block records with the same score
+breakdown as the original gate logs. The terminal output is structured as an explicit
+transcript with the active specialist names in each section so the simulated collaboration
+is easy to follow.
 
 ### Google Calendar and Gmail
 
@@ -63,10 +79,11 @@ The live path uses Mem0 `MemoryClient`, exact `infer=False` seeds, and a matchin
 are user-scoped; `memory-gate-v0` remains the local agent and decision-log identity.
 Before seeding, the adapter lists the user scope and skips exact seed texts that already
 exist. Post-turn learning also uses Mem0 `add`, `update`, and `delete` APIs with exact
-stored text after the project’s own extraction and gating step. Adds can be asynchronous;
-if a search misses a newly added or updated memory, wait briefly and rerun.
+stored text after the project’s own extraction and reconciliation step. Adds can be
+asynchronous; if a search misses a newly added or updated memory, wait briefly and rerun.
 
-Output includes retrieved IDs, leak status, and CMI scores. Agent-loop decisions append
+Output includes retrieved IDs, leak status, and CMI scores. `s_pert` is the worst-case
+score across multiple noisy perturbations of the same memory. Agent-loop decisions append
 to `logs/decisions.jsonl`. Criteria, judge prompt, model, perturbation, scope, and top-k
 are in `criteria/cmi_v0.yaml`.
 
@@ -79,5 +96,4 @@ python -m ruff format --check .
 python -m mypy
 ```
 
-Part A intentionally contains no LangGraph, Agents SDK, multi-agent gate, or vendored
-CMI research code.
+Part A intentionally contains no LangGraph, Agents SDK, or vendored CMI research code.
